@@ -1,0 +1,244 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Codificación y lengua ───────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+
+% ── Márgenes ────────────────────────────────────────────────────────────────
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=3cm, right=3cm]{geometry}
+
+% ── Tipografía ──────────────────────────────────────────────────────────────
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ── Matemáticas ─────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ── Tablas ──────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+
+% ── Cabecera y pie de página ────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textbf{UCM — GIDIA}}
+\fancyhead[R]{\small Ingeniería de la Privacidad}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Color ───────────────────────────────────────────────────────────────────
+\usepackage{xcolor}
+\definecolor{ucmteal}{RGB}{0, 130, 130}
+
+% ── Secciones coloreadas ────────────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\color{ucmteal}\large\bfseries}
+  {\thesection.}{0.5em}{}
+  [\color{ucmteal}\titlerule]
+\titleformat{\subsection}
+  {\bfseries\normalsize}
+  {\thesubsection.}{0.5em}{}
+
+% ── Párrafos ────────────────────────────────────────────────────────────────
+\usepackage{parskip}
+\setlength{\parskip}{6pt}
+
+% ── Hyperlinks ──────────────────────────────────────────────────────────────
+\usepackage[colorlinks=true, linkcolor=ucmteal, urlcolor=ucmteal, citecolor=ucmteal]{hyperref}
+
+% ────────────────────────────────────────────────────────────────────────────
+
+\begin{document}
+\thispagestyle{empty}
+
+% ── Portada ─────────────────────────────────────────────────────────────────
+\begin{center}
+  \vspace*{2cm}
+  {\large\bfseries Universidad Complutense de Madrid}\\[0.4em]
+  Grado en Ingeniería de Datos e Inteligencia Artificial\\
+  Seguridad y Privacidad\\[3cm]
+
+  \noindent\textcolor{ucmteal}{\rule{\linewidth}{1.5pt}}\\[0.5em]
+  {\LARGE\bfseries Práctica 8. Robo de Modelo}\\[0.3em]
+  \noindent\textcolor{ucmteal}{\rule{\linewidth}{1.5pt}}\\[3cm]
+
+  2 de mayo de 2026\\[1.5cm]
+
+  \begin{tabular}{rl}
+    \textbf{Asignatura:} & Seguridad y Privacidad \\[0.4em]
+    \textbf{Autores:}    & Javier Martín Fuentes \\
+                         & María Romero Huertas \\[0.4em]
+    \textbf{Profesores:} & Marcos Sánchez-Élez Martín \\
+                         & Inmaculada Pardines Lence \\
+  \end{tabular}
+\end{center}
+
+\newpage
+
+% ── Índice ──────────────────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Introducción}
+
+El objetivo de esta práctica es aplicar las técnicas aprendidas en la asignatura para realizar un robo de modelo. La primera parte consistió en entrenar un modelo propio, de carácter libre. Particularmente, se entrenó un modelo de reconocimiento de imágenes con una estructura clásica de CNN. Los datos de entrenamiento se modificaron ligeramente para hacer la situación más realista.
+
+La segunda parte consistió en realizar un intercambio de modelos con nuestros compañeros (Carlos Mantilla y Rodrigo Jesús-Portanet) para intentar robar el modelo ajeno. Se proporcionó el notebook completo de entrenamiento, junto con los pesos del modelo y un subconjunto de datos que podría usar el equipo contrario para su ataque.
+
+La técnica empleada para el robo se enmarca en el trabajo de Tramèr et al.\ (2016), \textit{Stealing Machine Learning Models via Prediction APIs}, que formaliza el \textbf{model extraction} como ataque adversarial de caja negra. A diferencia de la destilación de conocimiento cooperativa (Hinton et al., 2015), aquí el atacante no tiene acceso a los datos de entrenamiento ni a la arquitectura del teacher: solo puede consultar su API y observar las probabilidades devueltas. La implementación está inspirada en el repositorio público de demostración de Praetorian (\texttt{model-extraction-demo}). Se han entrenado cuatro modelos de extracción con presupuestos de consulta crecientes (100, 250, 500 y 1\,000 consultas sobre un teacher entrenado con 5\,000 muestras) y se ha medido el acuerdo de cada modelo robado con el teacher mediante \textit{exact match} y \textit{Hamming accuracy}.
+
+Los resultados muestran que el robo es muy efectivo a partir de 500 consultas (83,9\,\% de \textit{exact match}, 94,3\,\% de \textit{Hamming accuracy}) y prácticamente perfecto con 1\,000 consultas (99,6\,\% y 99,9\,\%, respectivamente), lo que equivale a reproducir el modelo original usando únicamente un 20\,\% del presupuesto de datos del teacher.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Técnica de extracción: \textit{Knowledge Distillation}}
+
+\subsection{Descripción e implementación}
+
+El ataque sigue el esquema de Tramèr et al.\ (2016): el atacante consulta la API del modelo víctima con imágenes de su elección y recopila las probabilidades de salida (\textit{soft labels}). Estas soft labels, al codificar no solo la clase predicha sino también las relaciones de similitud entre clases, contienen mucha más información que las etiquetas duras y permiten entrenar un modelo sustituto con un número de consultas muy inferior al coste de entrenamiento original. El repositorio de Praetorian que sirve de inspiración aplica esta misma idea sobre Fashion-MNIST con una arquitectura intencionadamente más pequeña que la del teacher.
+
+El escenario de ataque parte de un acceso de \textbf{caja negra}: no se conocen ni los pesos ni la arquitectura interna del modelo víctima. El conjunto de datos de ataque (\textit{challenge bundle}) contiene 1\,200 imágenes en escala de grises de $32\times32$ píxeles, junto con las probabilidades que el teacher asigna a cada una. El problema es de \textbf{clasificación multilabel} con cuatro clases (círculo, cuadrado, triángulo y cruz), ya que una imagen puede contener varias figuras simultáneamente; el teacher emplea activación sigmoid por clase en lugar de softmax para reflejar esta independencia.
+
+El procedimiento del ataque es el siguiente:
+
+\begin{enumerate}
+  \item \textbf{Selección de consultas.} Se toman las primeras $n$ imágenes del bundle como consultas al teacher, con $n \in \{100, 250, 500, 1\,000\}$.
+  \item \textbf{Entrenamiento del modelo estudiante.} Se entrena una \texttt{ExtractedCNN} propia minimizando la pérdida de destilación respecto a las probabilidades devueltas por el teacher.
+  \item \textbf{Evaluación.} Se mide el acuerdo del modelo extraído con el teacher sobre las 1\,200 imágenes disponibles.
+\end{enumerate}
+
+La ventaja clave de usar las probabilidades de salida en lugar de etiquetas duras es la \textbf{riqueza de información}: una predicción como $[0.87, 0.04, 0.06, 0.03]$ no solo indica la clase más probable, sino también el grado de certeza del modelo y la relación relativa entre clases, lo que acelera el aprendizaje del modelo ladrón con muy pocas consultas.
+
+\subsection{Arquitectura del modelo extraído}
+
+El modelo estudiante (\texttt{ExtractedCNN}) es una CNN deliberadamente distinta a la del teacher: el atacante no necesita conocer ni replicar la arquitectura original. Consta de tres bloques convolucionales seguidos de un clasificador:
+
+\begin{itemize}
+  \item \textbf{Bloque 1:} \texttt{Conv2d(1→32, 3×3, padding 1) + ReLU + MaxPool2d(2)}
+  \item \textbf{Bloque 2:} \texttt{Conv2d(32→64, 3×3, padding 1) + ReLU + MaxPool2d(2)}
+  \item \textbf{Bloque 3:} \texttt{Conv2d(64→128, 3×3, padding 1) + ReLU + MaxPool2d(2)}
+  \item \textbf{Clasificador:} \texttt{Flatten → Linear(2048→256) → ReLU → Dropout(0.3) → Linear(256→4)}
+\end{itemize}
+
+La salida son logits (sin sigmoid); la sigmoid se aplica solo en la evaluación mediante el método \texttt{predict\_proba}. El modelo cuenta con 618\,244 parámetros entrenables.
+
+\subsection{Función de pérdida y \textit{temperature scaling}}
+
+Se emplea la pérdida de destilación de Hinton et al.\ (2015) adaptada al caso multilabel:
+
+\begin{equation}
+  \mathcal{L}(s,\, p;\, T) \;=\; T^{2} \cdot \mathrm{BCE}\!\left(\frac{s}{T},\; \sigma\!\left(\frac{\mathrm{logit}(p)}{T}\right)\right)
+\end{equation}
+
+donde $s$ son los logits del estudiante, $p$ las probabilidades del teacher, $\sigma$ la función sigmoid y $T$ la temperatura de destilación. Con $T = 2$ las distribuciones se suavizan, transfiriéndose más información por muestra. El factor $T^2$ compensa la reducción de magnitud de los gradientes al escalar los logits.
+
+El repositorio de referencia (Praetorian) usa divergencia KL y temperatura $T = 3$. En nuestra implementación se optó por BCE con logits y $T = 2$, que es equivalente para distribuciones de salida sigmoid y produce gradientes más estables en el régimen multilabel de cuatro clases.
+
+El entrenamiento usa el optimizador Adam ($\text{lr} = 10^{-3}$) con \textit{cosine annealing} durante 80 épocas y tamaño de batch 32.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Experimentos por presupuesto de consultas}
+
+Se han entrenado cuatro modelos de extracción variando el número de consultas al teacher. En todos los casos, el teacher fue entrenado originalmente con 5\,000 muestras.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    \textbf{Modelo} & \textbf{Consultas} & \textbf{\% sobre teacher} \\
+    \midrule
+    Extraído-100  & 100   & 2\,\%  \\
+    Extraído-250  & 250   & 5\,\%  \\
+    Extraído-500  & 500   & 10\,\% \\
+    Extraído-1000 & 1\,000 & 20\,\% \\
+    \bottomrule
+  \end{tabular}
+  \caption{Presupuestos de consulta evaluados.}
+\end{table}
+
+Cada modelo se evalúa sobre el bundle completo de 1\,200 imágenes. Las métricas empleadas son:
+
+\begin{itemize}
+  \item \textbf{Exact match:} porcentaje de imágenes en las que las 4 etiquetas predichas coinciden exactamente con las del teacher (binarizadas con umbral 0,5).
+  \item \textbf{Hamming accuracy:} fracción de etiquetas (por imagen y clase) que coinciden con el teacher.
+  \item \textbf{MAE de probabilidades:} error absoluto medio entre las probabilidades del modelo extraído y las del teacher.
+\end{itemize}
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Resultados y evaluación del robo}
+
+La Tabla~2 recoge los resultados de los cuatro modelos de extracción:
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{cccccc}
+    \toprule
+    \textbf{Consultas} & \textbf{\% teacher} & \textbf{Exact match} & \textbf{Hamming acc} & \textbf{MAE probs} \\
+    \midrule
+    100   & 2\,\%  & 25,7\,\% & 70,6\,\% & 0,3258 \\
+    250   & 5\,\%  & 59,2\,\% & 84,1\,\% & 0,1671 \\
+    500   & 10\,\% & 83,9\,\% & 94,3\,\% & 0,0631 \\
+    1\,000 & 20\,\% & 99,6\,\% & 99,9\,\% & 0,0029 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Acuerdo con el teacher según presupuesto de consultas.}
+\end{table}
+
+Los resultados muestran una progresión clara:
+
+\begin{itemize}
+  \item \textbf{100 consultas.} El modelo apenas supera al azar (25\,\% de \textit{exact match} para 4 clases uniformes). Con tan pocas muestras no hay señal suficiente para aprender las fronteras de decisión, y el MAE de 0,33 indica que las probabilidades predichas distan mucho de las del teacher.
+
+  \item \textbf{250 consultas.} El salto es significativo: el \textit{exact match} sube a 59,2\,\%. El modelo ya captura la estructura general del problema y reproduce correctamente algo más de la mitad de las predicciones completas del teacher.
+
+  \item \textbf{500 consultas.} Con solo el 10\,\% del presupuesto original, el modelo extraído alcanza un 83,9\,\% de \textit{exact match} y 94,3\,\% de \textit{Hamming accuracy}. El MAE cae a 0,06, lo que indica que las probabilidades son ya una buena aproximación a las del teacher. El robo puede considerarse funcionalmente exitoso a partir de este punto.
+
+  \item \textbf{1\,000 consultas.} El robo es prácticamente perfecto: 99,6\,\% de \textit{exact match} y 99,9\,\% de \textit{Hamming accuracy}, con un MAE de 0,003. Usando solo un 20\,\% del coste de entrenamiento del teacher, el modelo extraído reproduce su comportamiento de forma casi indistinguible.
+\end{itemize}
+
+Las matrices de confusión por clase confirman que a 1\,000 consultas los falsos positivos y falsos negativos son residuales en las cuatro categorías (círculo, cuadrado, triángulo y cruz). A 100 consultas, en cambio, se observan errores sistemáticos, especialmente en clases con menor frecuencia de aparición.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Conclusiones}
+
+El ataque de robo de modelo basado en destilación de conocimiento —siguiendo el esquema de Tramèr et al.\ (2016)— resulta altamente efectivo incluso con presupuestos de consulta muy reducidos. La clave del éxito reside en el uso de las probabilidades de salida del teacher (\textit{soft labels}), que codifican mucha más información que las etiquetas duras y permiten que el modelo estudiante aprenda rápidamente las fronteras de decisión.
+
+Con 1\,000 consultas —un 20\,\% del presupuesto con que fue entrenado el teacher— se obtiene una copia con acuerdo prácticamente perfecto (99,6\,\% de \textit{exact match}). Incluso con 500 consultas (10\,\%) el modelo extraído es funcionalmente útil, con un 83,9\,\% de coincidencia exacta. Estos resultados superan los reportados en el demo de Praetorian sobre Fashion-MNIST ($\sim$81\,\% de acuerdo), lo que refleja que la tarea multilabel geométrica —con fronteras de decisión más limpias— es particularmente vulnerable a este tipo de ataque.
+
+Las principales defensas frente a este tipo de ataque pasan por degradar la información disponible en cada consulta:
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Defensa} & \textbf{Idea} \\
+    \midrule
+    Devolver solo la clase ganadora  & Elimina las soft labels; el atacante recibe etiquetas duras \\
+    Redondear probabilidades         & Reduce la precisión de la señal disponible \\
+    Añadir ruido aleatorio           & Degrada la calidad de cada consulta individual \\
+    Limitar la tasa de consultas     & Encarece el ataque al aumentar su coste temporal \\
+    Detectar patrones de consulta    & Los ataques sistemáticos generan distribuciones inusuales \\
+    \bottomrule
+  \end{tabular}
+  \caption{Defensas frente a ataques de model extraction.}
+\end{table}
+
+Cualquiera de estas medidas encarecería significativamente el ataque al aumentar el número de consultas necesarias para obtener una copia de calidad comparable. En particular, eliminar las probabilidades y devolver solo la clase predicha (etiqueta dura) es la defensa más directa, ya que destruye la fuente de información que hace posible el ataque con tan pocas consultas.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section*{Referencias}
+\addcontentsline{toc}{section}{Referencias}
+
+\begin{itemize}
+  \item Tramèr, F., Zhang, F., Juels, A., Reiter, M.\,K., \& Ristenpart, T. (2016). \textit{Stealing Machine Learning Models via Prediction APIs}. Proceedings of the 25th USENIX Security Symposium.
+
+  \item Hinton, G., Vinyals, O., \& Dean, J. (2015). \textit{Distilling the Knowledge in a Neural Network}. arXiv:1503.02531.
+
+  \item Praetorian (2024). \textit{model-extraction-demo} [repositorio público]. \url{https://github.com/praetorian-inc/model-extraction-demo}
+\end{itemize}
+
+\end{document}
