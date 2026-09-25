@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+practicas/robo-modelo/implementacion-multietiqueta/artifacts/
+practicas/robo-modelo/implementacion-multietiqueta/static/
